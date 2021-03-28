@@ -1,0 +1,25 @@
+.venv
+.vscode
+.antlr
+__pycache__
+.pytest_cache
+
+# Distribution / packaging
+target/java/deploy/
+target/python3/.Python
+target/python3/env/
+target/python3/build/
+target/python3/develop-eggs/
+target/python3/dist/
+target/python3/downloads/
+target/python3/eggs/
+target/python3/.eggs/
+target/python3/lib/
+target/python3/lib64/
+target/python3/parts/
+target/python3/sdist/
+target/python3/var/
+target/python3/*.egg-info/
+target/python3/.installed.cfg
+target/python3/*.egg
+target/python3/peoplecodeparser-*/

@@ -1,0 +1,16 @@
+import HR_GUIDED_SELF_SERVICE:Pages:*;
+
+Declare Function UseGSSActivityGuide PeopleCode FUNCLIB_HR_GSS.HR_MSS_CT_NAME FieldFormula;
+
+Local HR_GUIDED_SELF_SERVICE:Pages:ConfirmationPageActivate &Confirmation;
+
+&Confirmation = create HR_GUIDED_SELF_SERVICE:Pages:ConfirmationPageActivate();
+#If #ToolsRel >= "8.55" #Then
+   If UseGSSActivityGuide() Then
+      &Confirmation.Activate( True);
+   Else
+      &Confirmation.Activate( False);
+   End-If
+#Else
+&Confirmation.Activate( False);
+#End-If;

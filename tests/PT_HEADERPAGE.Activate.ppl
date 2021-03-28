@@ -1,0 +1,375 @@
+import PTBR_BRANDING:UTILITY:ThemeAssignmentCookie;
+import PT_PAGE_UTILS:*; /*855-801*/
+import PTNUI:NavBarContentArea:*; /* 856-08 security */
+
+Declare Function GetNavBarURL PeopleCode PTNUI_NB_WRK.FUNCLIB FieldFormula;
+Declare Function getCurrentThemeIdForPortal PeopleCode FUNCLIB_PTBR.FUNCLIB FieldFormula;
+Declare Function setThemeCookieForPortal PeopleCode FUNCLIB_PTBR.FUNCLIB FieldFormula;
+Declare Function PopulateGlobalSearchGroups PeopleCode PT_WORK.PTS_SRCH_BTN FieldFormula;
+Declare Function getPortalContextNode PeopleCode FUNCLIB_PTUN.FUNCLIB FieldFormula;
+Declare Function GetNotifyURL PeopleCode PTPN_NOTIFY_WRK.FUNCLIB FieldFormula; /*902 */
+Declare Function getMyPreferencesUrl PeopleCode PTGP_USERPREFWK.FUNCLIB FieldFormula;
+Declare Function getIBNetworkNodes PeopleCode FUNCLIB_PTUN.FUNCLIB FieldFormula; /* 855-801 */
+Declare Function setUnCookie PeopleCode FUNCLIB_PTUN.FUNCLIB FieldFormula; /* 855-801 */
+Declare Function GetCRefByURL PeopleCode PTS_SRCH.PTS_SRCH_BTN FieldFormula; /*855-802 */
+Declare Function DisplayMCFConsole PeopleCode WEBLIB_CTI.ISCRIPT2 FieldFormula; /* 855-806 */
+
+
+Local string &cookieValue;
+
+Local boolean &bIsGuided = IsMDGuided();
+Local boolean &bSUOW = IsSingleUnitOfWork();
+Local boolean &bNonOptimized = IsMDNonOptimized();
+
+Local boolean &bIsAG = IsAGComponent();
+Local boolean &bIsSFF = (%Request <> Null And
+   %Request.BrowserDeviceFormFactor = %FormFactor_Small); /* 855-804: Small Form Factor Test */
+
+Local PTBR_BRANDING:UTILITY:ThemeAssignmentCookie &themeAssignmentCookie;
+Local PT_PAGE_UTILS:Banner &oBanner = create PT_PAGE_UTILS:Banner(); /* 855-801 */
+
+/* theme id process */
+&themeAssignmentCookie = create PTBR_BRANDING:UTILITY:ThemeAssignmentCookie(%Portal);
+&cookieValue = %Request.GetCookieValue(&themeAssignmentCookie.CookieName);
+If (None(&cookieValue)) Then
+   &themeAssignmentCookie = Null;
+Else
+   &themeAssignmentCookie.fromString(&cookieValue);
+   If (&themeAssignmentCookie.PortalName <> %Portal) Then
+      &themeAssignmentCookie = Null;
+   End-If;
+End-If;
+
+If (None(&themeAssignmentCookie)) Then
+   SetThemeId(getCurrentThemeIdForPortal(%Portal));
+   &themeAssignmentCookie = setThemeCookieForPortal(%Portal);
+End-If;
+
+/** end of theme id process **/
+
+/* MAF Begin 855-801 */
+/* MAF client side JS code for Push Notification */
+AddJavaScript(HTML.PTMAF_PUSH_JS);
+
+/* SSO ping to the remote nodes to improve the performance. 
+   Per node, single async request will be made for the entire user session */
+
+&cookieValue = %Request.GetCookieValue("psping");
+If (&cookieValue = "") Then
+   Local string &nodeList = getIBNetworkNodes();
+   If (&nodeList <> "false") Then
+      setUnCookie("psping", &nodeList);
+      AddJavaScript(HTML.PTUN_PINGJS);
+   End-If;
+End-If;
+/* MAF End 855-801 */
+
+If Not (IsHomeEnabled()) Then
+   PT_WORK.PT_BUTTON_HOME.Visible = False;
+End-If;
+#If #toolsrel < "8.55.13" #Then
+   If Not (IsLogoutEnabled()) Then
+#Else
+   /* 855-13a - Support guest disabling of Signout via permission */
+   If Not (IsLogoutEnabled()) Or
+         (IsIScriptAuthorized("WEBLIB_PORTAL", "PT_PORTAL_HDRLINK", "FieldFormula", "IScript_HideSignOutLink", %Action_UpdateDisplay) And
+            Not (IsUserInRole("PeopleSoft Administrator"))) Then
+   #End-If
+   
+   PT_WORK.PT_BUTTON_LOGOUT.Visible = False;
+End-If;
+
+/* 855-802: Permission Check */
+Local boolean &bAddToAuth = False;
+/* 856 - enable sff to support pinto */
+#If #toolsrel < "8.56" #Then
+   If (IsPinEnabled() And
+         Not (&bIsSFF)) Then /* 855-803 check only when PinEnabled & SFSmall for Perf*/ /* 855-804: Small Form Factor disabled */
+
+#Else
+   If (IsPinEnabled()) Then /* 856 - permission level now checked on all form factors */
+   #End-If
+   &bAddToAuth = IsIScriptAuthorized("WEBLIB_PTNUI", "PT_BUTTON_PIN", "FieldFormula", "IScript_SavePin", %Action_UpdateDisplay);
+End-If;
+
+/* 855-01a: move global outside AddTo functionality for generic availability by other features */
+try
+   AddOnLoadScript("portalContextNodeURI = '" | getPortalContextNode() | "';");
+catch Exception &ep
+end-try;
+
+/* 901 - Add to/Pin functionality */
+If /*Not (IsPinEnabled()) Or
+      &bIsSFF Or 855-804: no longer necessary */ Not (&bAddToAuth) Then /* 855-802 - add permission check */
+   PT_WORK.PT_ADD_TO_HP.Visible = False;
+   PT_WORK.PT_ADD_TO_NAVBAR.Visible = False;
+   PT_WORK.PT_ADD_TO_FAV.Visible = False;
+Else
+   AddStyleSheet(StyleSheet.PTNUI_PINTO_CSS);
+   AddJavaScript(HTML.PTNUI_PINTO_JS);
+   /* AddOnLoadScript("portalContextNodeURI = '" | getPortalContextNode() | "';"); -- 8.55-01a: moved outside conditional */
+   /* 856 - only display Add To Homepage if the component is optimized for SFF */
+   #If #toolsrel >= "8.56" #Then
+      If &bIsSFF And
+            Not (IsSmallFFOptimized()) Then
+         PT_WORK.PT_ADD_TO_HP.Visible = False;
+      End-If;
+   #End-If
+   PT_WORK.PT_ADD_TO_HP.JavaScriptEvents = "href=""javascript:PTPinTo.SavePin('LP');""";
+   PT_WORK.PT_ADD_TO_NAVBAR.JavaScriptEvents = "href=""javascript:PTPinTo.SavePin('NB');""";
+   PT_WORK.PT_ADD_TO_FAV.JavaScriptEvents = "href=""javascript:PTPinTo.SavePin('FAV');""";
+End-If;
+
+
+If ( Not (IsStandardSearchEnabled())) Then
+   PT_WORK.PT_BUTTON_NEXTLST.Visible = False;
+   PT_WORK.PT_BUTTON_RETLST.Visible = False;
+   PT_WORK.PT_BUTTON_PREVLST.Visible = False;
+Else
+   /* If (IsFluidSearchStart() Or
+         Not (IsNextInListEnabled())) Then
+      PT_WORK.PT_BUTTON_NEXTLST.Visible = False;
+   Else
+      PT_WORK.PT_BUTTON_NEXTLST.Visible = True;
+   End-If;
+   If (IsFluidSearchStart() Or
+         Not (IsPrevInListEnabled())) Then
+      PT_WORK.PT_BUTTON_PREVLST.Visible = False;
+   Else
+      PT_WORK.PT_BUTTON_PREVLST.Visible = True;
+   End-If;
+   
+   If IsFluidSearchStart() Then
+      PT_WORK.PT_BUTTON_RETLST.Visible = False;
+   Else
+      PT_WORK.PT_BUTTON_RETLST.Visible = True;
+   End-If;*/
+   If Not (&bIsGuided) Then
+      PT_WORK.PT_BUTTON_NEXTLST.Visible = True;
+      PT_WORK.PT_BUTTON_PREVLST.Visible = True;
+   End-If;
+End-If;
+
+/* 855-801 - enable button area in banner */
+Local Field &tField;
+If (&bIsGuided) Then
+   PTLAYOUT.PT_GUIDED_CONTAIN.Visible = True;
+   PT_WORK.PT_BUTTON_NEXTLST.Visible = True;
+   PT_WORK.PT_BUTTON_PREVLST.Visible = True;
+   If (&bIsAG) Then
+      /* 855-805 UX changes for next and previous */
+      &tField = GetPageField(Page.PT_HEADERPAGE, "PT_PREVIOUS");
+      If &tField <> Null Then
+         &tField.HoverText = &tField.GetShortLabel("PT_PREVIOUS_LIST");
+         &tField.LabelImage = Image.PT_GUIDED_PREV_ICON_ALT;
+      End-If;
+      &tField = GetPageField(Page.PT_HEADERPAGE, "PT_NEXT");
+      If &tField <> Null Then
+         &tField.HoverText = &tField.GetShortLabel("PT_BUTTON_NEXTLIST");
+         &tField.LabelImage = Image.PT_GUIDED_NEXT_ICON_ALT;
+      End-If;
+      
+      PT_WORK.PT_BUTTON_SUBMIT.Visible = True;
+      PT_WORK.PT_BUTTON_SUBMIT.FreeFormStyleName = "psc_hidden";
+   Else
+      /* 855-805: Only show image now that it is text+image */
+      &tField = GetPageField(Page.PT_HEADERPAGE, "PT_PREVIOUS");
+      If &tField <> Null Then
+         &tField.FreeFormStyleName = "psc_image_only";
+      End-If;
+      &tField = GetPageField(Page.PT_HEADERPAGE, "PT_NEXT");
+      If &tField <> Null Then
+         &tField.FreeFormStyleName = "psc_image_only";
+      End-If;
+      
+      PT_WORK.PT_BUTTON_SUBMIT.Visible = False;
+   End-If;
+Else
+   PTLAYOUT.PT_GUIDED_CONTAIN.Visible = False;
+End-If;
+
+
+If (IsMDRequest() Or
+      IsMDComponent()) Then /* VB 805*/
+   PT_WORK.PT_BUTTON_NEXTLST.Visible = True;
+   PT_WORK.PT_BUTTON_PREVLST.Visible = True;
+   /*PT_WORK.PT_BUTTON_RETLST.Visible = True;*/
+End-If;
+
+Local Field &tfld = &oBanner.GetFixedPageTitleField();; /* 855-805: fixed title field */
+If (IsMDSearchEnabled() Or
+      IsStandardSearchEnabled()) Then
+   PT_WORK.PT_BUTTON_SUBMIT.Visible = False;
+   If (IsFluidSearchStart()) Then
+      
+      PTLAYOUT.PT_GUIDED_CONTAIN.Visible = False;
+      PT_WORK.PT_BUTTON_NEXTLST.Visible = False;
+      PT_WORK.PT_BUTTON_PREVLST.Visible = False;
+      
+      /* 855-805: Set the new fixed page title on entry of search */
+      &oBanner.SetFixedPageTitle(GetComponentTitle());
+   Else
+      If (&bIsGuided) Then
+         PTLAYOUT.PT_GUIDED_CONTAIN.Visible = True;
+         PT_WORK.PT_BUTTON_NEXTLST.Visible = True;
+         PT_WORK.PT_BUTTON_PREVLST.Visible = True;
+      End-If;
+      PT_WORK.PT_BUTTON_BACKS.JavaScriptEvents = "onclick=""javascript:cancelBubble(event);"" href=""javascript:DoBackToSearch();""";
+   End-If;
+   
+   /* 8.55-805 in case we go directly into the component without hitting the search page first */
+   If &tfld <> Null And
+         None(&tfld.Label) Then
+      &oBanner.SetFixedPageTitle(GetComponentTitle());
+   End-If;
+Else
+   PT_WORK.PT_BUTTON_BACKS.Visible = False;
+   /* 855-805: Do not render fixed page title field if search is not enabled */
+   If &tfld <> Null Then
+      &tfld.Visible = False;
+   End-If;
+End-If;
+
+If Not (IsBackEnabled()) Then
+   PT_WORK.PT_BUTTON_BACK.Visible = False;
+Else
+   /* 855-801 - change image and label of back button */
+   If &bIsGuided And
+         &bIsAG Then
+      Local Field &backbtn = GetField(PT_WORK.PT_BUTTON_BACK);
+      &backbtn.LabelImage = Image.PT_BACK_AS_EXIT_ICON;
+      &backbtn.Label = &backbtn.GetLongLabel("PT_BUTTON_EXIT");
+      &backbtn.HoverText = &backbtn.Label;
+      &backbtn.AddFFClass("psc_guided-exit");
+   End-If;
+End-If;
+
+/* 855-802: Permission Check / 855-804 Efficiencies */
+Local boolean &PNAuthorized = False;
+If /*IsNotifyEnabled() 855-07a replaced with new API for Fluid flag */IsNotificationEnabled() Then
+   &PNAuthorized = IsMenuItemAuthorized(MenuName.PTPNEVENTS, BarName.USE, ItemName.PTPN_POPUP_WINDOW, Page.PTPN_CAT_NOTIFY, %Action_UpdateDisplay);
+End-If;
+
+/* 808 - new */
+If /* Not (IsNotifyEnabled()) Or 855-804 Efficiencies */ Not (&PNAuthorized) Then /* 855-802: permission check */
+   PT_WORK.PT_BUTTON_NOTIFY.Visible = False;
+   /* 855 - 110 menu version */
+   PTLAYOUT.PT_MENU_NOTIFY.Visible = False;
+Else
+   PTLAYOUT.PT_MENU_NOTIFY.AriaWrapperAttributes = "role=""listitem"""; /* 855-110 aria entry for action menu item */
+   PT_WORK.PT_BUTTON_NOTIFY.JavaScriptEvents = "href=""javascript:DoNotify();"""; /* 902 */
+   PT_WORK.PT_BUTTON_NOTIFY.FreeFormStyleName = "psc_badge-hide";
+   AddOnLoadScript("PnWindowSubscribe();"); /* 8.55-01a: add semi-colon for correctness */
+   AddJavaScript(HTML.PTPN_NOTIFICATION_MSG_JS);
+   /* 902 */
+   AddOnLoadScript("PTNotifyWin.Url = '" | GetNotifyURL( True) | "';");
+   AddStyleSheet(StyleSheet.PTPN_NOTIFYWIN_CSS);
+End-If;
+
+/* 855-802: check permissions / 855-804 efficiencies */
+Local boolean &NBAuthorized = False;
+If IsNavBarEnabled() Then
+   &NBAuthorized = IsMenuItemAuthorized(MenuName.NUI_FRAMEWORK, BarName.USE, ItemName.PT_NAVBAR, Page.PTNUI_NAVBAR, %Action_UpdateDisplay);
+End-If;
+
+If /*Not (IsNavBarEnabled()) Or 855-804 efficiencies */ Not (&NBAuthorized) Then /* 855-802: check permissions */
+   PT_WORK.PT_BUTTON_NAVBAR.Visible = False;
+Else
+   <* 855-110 remove
+   /* 901 - Change label on small form factor */
+   If %Request.BrowserDeviceFormFactor = %FormFactor_Small Then
+      PT_WORK.PT_BUTTON_NAVBAR.Label = PT_WORK.PT_BUTTON_NAVBAR.GetLongLabel("PT_NAVIGATOR");
+   End-If;
+*>
+   AddStyleSheet(StyleSheet.PTNUI_NAVBAR_CSS);
+   PT_WORK.PT_BUTTON_NAVBAR.JavaScriptEvents = GetHTMLText(HTML.PT_NAVBAR_BTN_EVTS, GetNavBarURL( True));
+   <*AddOnLoadScript("PTNavBar.Url = '" | GetNavBarURL( True) | "';");*>
+End-If;
+
+Local string &sPageTitle; /* 855-801 */
+If (IsFluidSearchStart()) Then
+   &sPageTitle = GetComponentTitle(); /* 855-805R1 */
+Else
+   &sPageTitle = GetPageTitle(); /* 855-801: use variable */
+   AddOnLoadScript("SearchPageClose();");
+End-If;
+
+/*109 / 855-801 set page title */
+If (IsMDListPopup()) Then
+   &oBanner.SetPageTitleSelector(&sPageTitle, "", "", "");
+Else
+   &oBanner.SetPageTitle(&sPageTitle);
+End-If;
+<* 802 - redundant
+/* 855-801 - use banner utility */
+&oBanner.SetPageTitle(&sPageTitle);
+*>
+
+/* Global Search Code */
+
+Local Rowset &request_RS = CreateRowset(Record.PSPTSF_SRCCAT);
+&request_RS.GetRow(1).GetRecord(Record.PSPTSF_SRCCAT).PTSF_SRCCAT_NAME.Value = "PTPORTALREGISTRY";
+&request_RS.GetRow(1).GetRecord(Record.PSPTSF_SRCCAT).DESCR100.Value = %ToolsRelease;
+Local boolean &isChg = &request_RS.GetRow(1).IsChanged;
+
+If Not &isChg Then
+   SetSaveWarningFilter( False);
+End-If;
+PT_WORK.PTS_SRCH_GRPBOX.Visible = PopulateGlobalSearchGroups();
+PT_WORK.PTNUI_SSID.Value = (create PTNUI:NavBarContentArea:Security("ptnbsid")).getSSID; /* 856-08 security */
+If Not &isChg Then
+   SetSaveWarningFilter( True);
+End-If;
+
+/* 855-802 accessibility role for banner section */
+PTLAYOUT.HEADER_GROUPBOX1.AriaWrapperAttributes = "role=""banner""";
+
+PT_WORK.PTS_GSEARCHM_BTN.Visible = PT_WORK.PTS_SRCH_GRPBOX.Visible; /* 810 - action menu version */
+/* 901 - added aria attributes */
+PT_WORK.PTS_GSEARCH_BTN.JavaScriptEvents = GetHTMLText(HTML.PT_TRAY_TOGGLE_EVTS, "PT_GSEARCH_BTN");
+PT_WORK.PTS_GSEARCH_BTN.AriaWrapperAttributes = GetHTMLText(HTML.PT_ARIA_EXP_CONTROL, "hdrdivPTS_GSEARCH_TRAY"); /* 110 - replace htmlattributes with aria wrapper */
+PT_WORK.PTS_SRCH_FLDS_CONT.AriaWrapperAttributes = GetHTMLText(HTML.PT_ARIA_NAMED_REGION, MsgGetText(124, 523, "Message Not Found: Global Search Dialog")); /* 901 - accessibility */ /* 110 - replace javascriptevents with aria wrapper */
+PT_WORK.PTS_SRCH_FLDS_CONT.JavaScriptEvents = "onkeydown=""javascript:closeGBLSearchTray(event,'PT_GSEARCH_BTN');"""; /* 110 - allow escape to close */
+<* /* 856-08 removed for accessibility */
+PT_WORK.PTS_SRCH_BTN.JavaScriptEvents = "onkeydown=""javascript:closeGBLSearchTray(event,'PT_GSEARCH_BTN');"""; /* 110 - allow escape to close */
+*>
+PT_WORK.PTS_SRCH_GRPBOX.AriaWrapperAttributes = "role=""search"""; /* 901- accessibility */ /* 110 - replace JavascriptEvents with aria wrapper */
+PT_WORK.PTS_KEYWORDS.JavaScriptEvents = GetHTMLText(HTML.PT_ENTERKEY_EVTS, "PTS_SRCH_BTN_GLB"); /* 901 - enter key for search */
+/* End Global Search Code */
+
+/* 810 - replace with new aria was aria-live='polite' */
+/* 110 - replace JavascriptEvents with new aria wrapper */
+PT_WORK.PT_ANIMATE_GBX1.AriaWrapperAttributes = "role=""alert"" aria-live=""assertive""";
+
+
+/* Action Menu */
+Local string &sMenuTitle = EscapeHTML(MsgGetText(124, 524, "Message Not Found: Action Menu")); /* 855-806 make sure special characters do not affect html */
+PTLAYOUT.HEADER_ACTIONGROUP.SetGroupletMOptions("sStyle@ps_popup-menu ps_menutype-act;sTitle@" | &sMenuTitle | ";bAutoClose@1;bMask@1;sMaskStyle@ps_masktrans;bVertical@1;bHeader@0;");
+
+/* My Preferences */
+PT_WORK.PT_MY_PREFERENCES.Visible = False;
+If ((%Component <> Component.PTGP_USERPREF_FL) And
+      (IsMenuItemAuthorized(MenuName.PTGP_MENU, BarName.USE, ItemName.PTGP_USERPREF_FL, Page.PTGP_USERPREF_FL, %Action_UpdateDisplay))) Then
+   PT_WORK.PT_MY_PREFERENCES.Visible = True;
+   PT_WORK.PT_MY_PREFERENCES.JavaScriptEvents = "href=""javascript:DoURLWarning('" | EscapeJavascriptString(getMyPreferencesUrl()) | "')""";
+End-If;
+
+/* 855-804 MultiChannel Link */
+PT_WORK.PT_MCF_CONSOLE.Visible = False;
+If Not (&bIsSFF) And
+      IsUserInPermissionList("PTPT4700") Then
+   /* determine if configured */
+   Local string &sMCFJS = DisplayMCFConsole(); /* 855-806: fetch appropriate javascript call based on configuration */
+   If All(&sMCFJS) Then
+      AddJavaScript(HTML.PT_MCF_FUNCTIONS_JS); /* add javascript to page for mcf/cti */
+      PT_WORK.PT_MCF_CONSOLE.JavaScriptEvents = "href=""javascript:" | &sMCFJS | ";""";
+      PT_WORK.PT_MCF_CONSOLE.Visible = True;
+   End-If;
+End-If;
+
+/* 855-806 Popup Notifications */
+If GetUserOption("PPTL", "POPUPWIN") = "Y" Then
+   AddJavaScript(HTML.PT_PRCS_USER_NOTIFY_JS);
+   AddStyleSheet(StyleSheet.PT_PRCS_USER_NOTIFY_CSS);
+   AddOnLoadScript("popupnotification();"); /* 8.55-01a: add semi-colon for correctness */
+End-If;
