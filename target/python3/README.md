@@ -12,7 +12,7 @@ The primary goal of this parser is to enable applications which analyze PeopleCo
 
 Another application of the parser is to build documentation generators, such as `AppClassDoc` (_**TODO**: Provide a link to it once it's on GitHub_).
 
-As mentioned in the [About](#About) section above, the parser grammar does not reference individual built-in functions, which a parser aimed at, say, compiling the language would need to do. For example, it will not enforce the fact that the `SQLExec` function requires a first argument that is either a string or a SQL definition reference, and then has zero or more literals, variable references, Record Field references, etc. Valid PeopleCode programs should be successfully parsed by this parser (with the one exception described further below), but it would also be possible to write a syntactically correct PeopleCode program that would fail to compile due to semantic issues, as in the following absurd example:
+As mentioned in the "[About](#About)" section above, the parser grammar does not reference individual built-in functions, which a parser aimed at, say, compiling the language would need to do. For example, it will not enforce the fact that the `SQLExec` function requires a first argument that is either a string or a SQL definition reference, and then has zero or more literals, variable references, Record Field references, etc. Valid PeopleCode programs should be successfully parsed by this parser (with the one exception described further below), but it would also be possible to write a syntactically correct PeopleCode program that would fail to compile due to semantic issues, as in the following absurd example:
 
 ```
 Local SOME:APPLICATION:Class &anObject;

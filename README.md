@@ -12,7 +12,7 @@ The primary goal of this parser is to enable applications which analyze PeopleCo
 
 Another application of the parser is to build documentation generators, such as `AppClassDoc` (_**TODO**: Provide a link to it once it's on GitHub_).
 
-As mentioned in the [About](#About) section above, the parser grammar does not reference individual built-in functions, which a parser aimed at, say, compiling the language would need to do. For example, it will not enforce the fact that the `SQLExec` function requires a first argument that is either a string or a SQL definition reference, and then has zero or more literals, variable references, Record Field references, etc. Valid PeopleCode programs should be successfully parsed by this parser (with the one exception described further below), but it would also be possible to write a syntactically correct PeopleCode program that would fail to compile due to semantic issues, as in the following absurd example:
+As mentioned in the "[About](#About)" section above, the parser grammar does not reference individual built-in functions, which a parser aimed at, say, compiling the language would need to do. For example, it will not enforce the fact that the `SQLExec` function requires a first argument that is either a string or a SQL definition reference, and then has zero or more literals, variable references, Record Field references, etc. Valid PeopleCode programs should be successfully parsed by this parser (with the one exception described further below), but it would also be possible to write a syntactically correct PeopleCode program that would fail to compile due to semantic issues, as in the following absurd example:
 
 ```
 Local SOME:APPLICATION:Class &anObject;
@@ -28,7 +28,19 @@ This PeopleCode snippet would be accepted as syntactically valid by the parser b
 
 The parser is built with [ANTLR 4](http://www.antlr.org/). As is customary for ANTLR 4 parsers, it consists of separate lexer and parser definitions. The lexer is provided in both [Java](src/java/PeopleCodeLexer.g4)- and [Python](src/python3/PeopleCodeLexer.g4)-flavored versions that employ language-specific semantic predicates. The [parser](src/common/PeopleCodeParser.g4) is common to both languages. ANTLR 4 limitations make it so that even though the Java- and Python-specific versions of the lexer share 95% of the same code, this cannot be factored out into a common file to be imported by both. (As a side note, if you use Visual Studio Code for development, these same limitations result in Mike Lischke's very good [ANTLR 4 extension](https://github.com/mike-lischke/vscode-antlr4) throwing errors because the parser and lexer are not in the same directory.)
 
-As hinted at in the [Goals](#Goals) section above, it is assumed that this parser will be used to parse PeopleCode programs which have been successfully compiled by the PeopleSoft Application Designer. The PeopleTools compiler enforces certain stylistic rules (e.g., three spaces per indentation level, compile-time automatic switching of single-quoted strings to double-quoted ones, keyword capitalization, newlines after `If ... Then`). However, the parser will (within reason) be more flexible with regard to enforcing style. For example, a compiled PeopleCode program will never contain the lines "` eNd-eVaLuAte  ;` " of "`If TrUe tHen WinMessage('True!') elsE WinMessage('How did I get here?!') eNd-iF ;`" (if not in a comment), but the parser will accept them as valid, just like the compiler would before enforcing its styling.
+As hinted at in the "[Goals](#Goals)" section above, it is assumed that this parser will be used to parse PeopleCode programs which have been successfully compiled by the PeopleSoft Application Designer. The PeopleTools compiler enforces certain stylistic rules (e.g., three spaces per indentation level, compile-time automatic switching of single-quoted strings to double-quoted ones, keyword capitalization, newlines after `If ... Then`). However, the parser will (within reason) be more flexible with regard to enforcing style. For example, a compiled PeopleCode program will never contain the lines:
+
+```
+/* ! */   eNd-eVaLuAte  ;  
+```
+
+or:
+
+```
+If   TrUe tHen WinMessage('True!')  elsE      WinMessage('How did I get here?!') eNd-iF ;
+```
+
+(if not in a comment), but the parser will accept them as valid, just like the compiler would before enforcing its styling.
 
 ANTLR 4 grammars require an entry point when parsing input. This PeopleCode parser defines two such rules:
 
@@ -106,7 +118,7 @@ Once these requirements are fulfilled, follow these steps:
    pip install invoke
    ```
 
-2. To run the Python tests you will also need virtualenv end PyTest:
+2. To run the Python tests you will also need virtualenv and PyTest:
 
    ```bash
    pip install virtualenv pytest
