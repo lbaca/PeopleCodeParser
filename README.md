@@ -10,7 +10,7 @@ It is initially based on PeopleTools 8.56, but built-in functions (the language 
 
 The primary goal of this parser is to enable applications which analyze PeopleCode and validate coding standards. An example of such an application is the [Static Code Analyzer](https://github.com/lbaca/PSCodeAnalyzer). Said application can use the parser to enforce rules such as "`SQLExec` function calls shall not use string literals as the first argument" (see [test_parser.py](tests/test_parser.py#L22-L44) for this precise example).
 
-Another application of the parser is to build documentation generators, such as `AppClassDoc` (_**TODO**: Provide a link to it once it's on GitHub_).
+Another application of the parser is to build documentation generators, such as [AppClassDoc](https://github.com/lbaca/appclassdoc).
 
 As mentioned in the "[About](#About)" section above, the parser grammar does not reference individual built-in functions, which a parser aimed at, say, compiling the language would need to do. For example, it will not enforce the fact that the `SQLExec` function requires a first argument that is either a string or a SQL definition reference, and then has zero or more literals, variable references, Record Field references, etc. Valid PeopleCode programs should be successfully parsed by this parser (with the one exception described further below), but it would also be possible to write a syntactically correct PeopleCode program that would fail to compile due to semantic issues, as in the following absurd example:
 
@@ -49,7 +49,7 @@ ANTLR 4 grammars require an entry point when parsing input. This PeopleCode pars
 
 Another feature of ANTLR 4 parsers is that they can emit tokens on various channels. Unless otherwise indicated, tokens are emitted on the default channel. It is common to see whitespace (which is itself a token) emitted on a `WHITESPACE` channel, which in many cases (e.g., for PeopleCode or Java) can be ignored, but in others (e.g., for Python or YAML) has significance. The PeopleCode parser defines the following additional channels:
 
-* `API_COMMENTS`: where Javadoc-like API comments are emitted (used by AppClassDoc);
+* `API_COMMENTS`: where Javadoc-like API comments are emitted (used by [AppClassDoc](https://github.com/lbaca/appclassdoc));
 * `COMMENTS`: where all other commented-out text is emitted;
 * `DIRECTIVES`: where Directive PeopleCode statements are emitted.
 

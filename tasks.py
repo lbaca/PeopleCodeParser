@@ -90,13 +90,15 @@ def _delete_temp_files(path):
 
 def _build_python_package(c):
     """Build the Python package."""
-    print('Building Python package...')
     with c.cd(_PYTHON_TARGET_BASE_DIR):
-        c.run('python setup.py sdist')
         dist_dir = os.path.join(_PYTHON_TARGET_BASE_DIR, 'dist')
+        print('Building Python source package...')
+        c.run('python setup.py sdist')
+        print('Building Python wheel...')
+        c.run('python setup.py bdist_wheel')
         with os.scandir(dist_dir) as dist:
             for d in dist:
-                if d.is_file() and d.name.endswith('.tar.gz'):
+                if d.is_file() and d.name.endswith('.whl'):
                     return d.path
 
 
